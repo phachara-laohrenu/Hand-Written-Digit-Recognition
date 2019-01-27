@@ -21,7 +21,6 @@ img = preprocessing.normalize(img)
 Img = img.ravel()
 imgplot = plt.imshow(img)
 plt.show()
-#Img = abs(Img-1)
 
 P = Predict(Theta1_opt,Theta2_opt,Img)
 C = Con(Theta1_opt,Theta2_opt,Img)
