@@ -1,0 +1,118 @@
+import scipy.optimize as opt
+from sklearn import preprocessing
+import numpy as np
+import sklearn.model_selection as sk
+import pandas as pd
+
+def remainder(a,b):
+    return a%b
+def sigmoid(z):
+    return 1/(1+np.exp(-z))
+def sigmoidGradient(z):
+    return sigmoid(z)*(1-sigmoid(z))    
+
+def CostFunction(nn_params,input_layer_size,hidden_layer_size,num_labels,X,Y,Lambda):
+    m = len(X)
+    Theta1 = np.reshape(nn_params[:hidden_layer_size*(input_layer_size+1)],(hidden_layer_size,input_layer_size+1),'F')
+    Theta2 = np.reshape(nn_params[hidden_layer_size*(input_layer_size+1):],(num_labels,hidden_layer_size+1),'F')    
+    X1 = np.insert(X,0,1,axis=1)   
+    h1 = sigmoid(X1 @ Theta1.T)
+    h1 = np.insert(h1,0,1,axis=1)   
+    h2 = sigmoid(h1 @ Theta2.T)
+    Y_bin = GetDummy(Y,num_labels)
+
+    return (1/m)*(-Y_bin * np.log(h2) - (1-Y_bin) * np.log(1-h2)).sum() + (Lambda/(2*m))*((Theta1[:,1:]**2).sum() + (Theta2[:,1:]**2).sum())
+
+def Gradient(nn_params,input_layer_size,hidden_layer_size,num_labels,X,Y,Lambda):
+    m = len(X)
+    in_Theta1 = np.reshape(nn_params[:hidden_layer_size*(input_layer_size+1)],(hidden_layer_size,input_layer_size+1),'F')
+    in_Theta2 = np.reshape(nn_params[hidden_layer_size*(input_layer_size+1):],(num_labels,hidden_layer_size+1),'F')
+    Theta1_grad = np.zeros((in_Theta1.shape))
+    Theta2_grad = np.zeros((in_Theta2.shape))
+    Delta1 = 0
+    Delta2 = 0
+    a1 = np.insert(X,0,1,axis=1)
+    z2 = a1 @ in_Theta1.T
+    a2 = sigmoid(z2)
+    a2 = np.insert(a2,0,1,axis=1)
+    z3 = a2 @ in_Theta2.T
+    a3 = sigmoid(z3)
+    
+    Y_bin = GetDummy(Y,num_labels)
+    
+    d3 = a3 - Y_bin
+    
+    d2 = (d3 @ in_Theta2[:,1:]) * sigmoidGradient(z2)
+    
+    Delta1 = Delta1 + (d2.T @ a1)
+    Delta2 = Delta2 + (d3.T @ a2)
+    
+    Theta1_grad = Delta1/m
+    Theta2_grad = Delta2/m
+    Theta1_grad[:,1:] += (in_Theta1[:,1:]*Lambda)/m
+    Theta2_grad[:,1:] += (in_Theta2[:,1:]*Lambda)/m
+    return np.concatenate((Theta1_grad.ravel('F'),Theta2_grad.ravel('F')),axis=0)
+
+def Predicts(Theta1,Theta2,X): 
+    h1 = sigmoid(np.insert(X,0,1,axis=1) @ Theta1.T)
+    h2 = sigmoid(np.insert(h1,0,1,axis=1) @ Theta2.T)
+    return np.argmax(h2,axis=1)
+    
+def Predict(Theta1,Theta2,X): 
+    h1 = sigmoid(np.insert(X,0,1,axis=0) @ Theta1.T)
+    h2 = sigmoid(np.insert(h1,0,1,axis=0) @ Theta2.T)
+    h2 = np.ndarray.tolist(h2)
+    return h2.index(max(h2))
+
+def Con(Theta1,Theta2,X):
+    h1 = sigmoid(np.insert(X,0,1,axis=0) @ Theta1.T)
+    h2 = sigmoid(np.insert(h1,0,1,axis=0) @ Theta2.T)
+    h2 = np.ndarray.tolist(h2)
+    return h2
+
+
+def Accuracy(Pre,Y):
+    m = len(Y)
+    error = 0
+    for i in range(len(Pre)):
+        if Pre[i] != Y[i]:
+            error += 1
+    a = ((m-error)/m)*100
+    
+    return 'Accuracy: ' + f'{a:.2f}' + '%'
+
+def MissLabel(Pre,Y):
+    error = []
+    for i in range(len(Pre)):
+        if Pre[i] != Y[i]:
+            error.append(i)
+    return error
+                    
+Lambda = 3
+input_layer_size = 784
+hidden_layer_size = 25
+num_labels = 10
+
+train = pd.read_csv("Desktop/train.csv")
+X = train[train.columns[1:input_layer_size+1]]
+X = X.values
+X = preprocessing.normalize(X)
+
+Y = train['label']
+Y = Y.values
+X, X_test, Y, Y_test = sk.train_test_split(X, Y, test_size=0, random_state=42) 
+
+inTheta1 = np.random.rand(hidden_layer_size,input_layer_size+1)
+inTheta2 = np.random.rand(num_labels,hidden_layer_size+1)
+in_params = np.concatenate((inTheta1.ravel('F'),inTheta2.ravel('F')),axis=0)
+args = (input_layer_size,hidden_layer_size,num_labels,X,Y,Lambda)
+
+Theta_opt = opt.fmin_cg(maxiter = 1000, f = CostFunction, x0 = in_params, fprime = Gradient, \
+                        args = (input_layer_size, hidden_layer_size, num_labels, X, Y, Lambda))
+
+Theta1_opt = np.reshape(Theta_opt[:hidden_layer_size*(input_layer_size+1)], (hidden_layer_size, input_layer_size+1), 'F')
+Theta2_opt = np.reshape(Theta_opt[hidden_layer_size*(input_layer_size+1):], (num_labels, hidden_layer_size+1), 'F')
+
+Pre = Predicts(Theta1_opt,Theta2_opt,X) 
+error = MissLabel(Pre,Y)
+print(Accuracy(Pre,Y))  
